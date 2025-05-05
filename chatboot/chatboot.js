@@ -1,7 +1,7 @@
 // chatboot.js - Corrigido para gerar QRCode em modo texto (compatível com Termius)
 
-import { generate } from 'qrcode-terminal';
-import { Client, LocalAuth } from 'whatsapp-web.js';
+const { generate } = require('qrcode-terminal');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'chatboot-session' }),
