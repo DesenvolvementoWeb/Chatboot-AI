@@ -1,6 +1,5 @@
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const { UserSession, sequelize } = require('./models/UserSession');
 
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: 'chatboot-session' }),
@@ -10,11 +9,7 @@ const client = new Client({
   }
 });
 
-(async () => {
-  await sequelize.sync();
-  console.log('✅ Banco sincronizado');
-})();
-
+const userUnit = {};
 const contactInfo = '📞 Contato Tia Bella: https://wa.me/5581985412587';
 
 const enviarBoasVindas = async (msg) => {
@@ -23,9 +18,9 @@ const enviarBoasVindas = async (msg) => {
   await msg.reply(`Olá, ${nome}🐵! Seja bem-vindo(a) à *Tia Bella Atividades Aquáticas*! 🤗`);
   await client.sendMessage(
     msg.from,
-    `Por favor, informe a unidade de seu interesse:\n` +
-    `➤ *P* - Paulista\n` +
-    `➤ *O* - Olinda`
+    'Por favor, informe a unidade de seu interesse:\n' +
+    '➤ *P* - Paulista\n' +
+    '➤ *O* - Olinda'
   );
 };
 
@@ -39,6 +34,7 @@ client.on('ready', () => console.log('✅ WhatsApp conectado com sucesso!'));
 client.on('message', async (msg) => {
   const from = msg.from;
   const text = msg.body.trim().toLowerCase();
+  const upperText = text.toUpperCase();
 
   if (msg.type === 'audio' || msg.type === 'ptt') {
     await msg.reply('🚫 No momento não estamos aceitando mensagens de áudio. Por favor, envie sua dúvida por texto.');
@@ -46,53 +42,52 @@ client.on('message', async (msg) => {
     return;
   }
 
-  let session = await UserSession.findOne({ where: { chatId: from } });
-
-  if (session && session.isActive === false && !/oi|olá/.test(text)) {
-    return;
-  }
-
-  if (/desligar|encerrar/i.test(text)) {
-    await UserSession.upsert({ chatId: from, isActive: false });
+  if (/desligar|encerrar/.test(text)) {
+    delete userUnit[from];
     await msg.reply('🔌 Atendimento encerrado! Quando quiser reiniciar, mande "oi".');
     return;
   }
 
-  if (/(menu|dia|tarde|noite|oi|olá|ola)/i.test(text)) {
-    await UserSession.upsert({ chatId: from, unidade: null, isActive: true });
+  if (/menu|dia|tarde|noite|oi|olá|ola/.test(text)) {
+    delete userUnit[from];
     await enviarBoasVindas(msg);
     return;
   }
 
-  if (!session || !session.unidade) {
-    if (text === 'p' || text === 'o') {
-      const unidade = text === 'p' ? 'Paulista' : 'Olinda';
-      await UserSession.upsert({ chatId: from, unidade });
-      await msg.reply(
-        `Você escolheu a unidade *${unidade}*.\nAgora, escolha a opção desejada:\n\n` +
-        `🏊‍♀️ *1 - Natação Infantil*\n` +
-        `💧 *2 - Hidroginástica*\n` +
-        `📌 *3 - Conhecer o espaço*`
-      );
-    }
+  if (!userUnit[from] && (upperText === 'P' || upperText === 'O')) {
+    const unidade = upperText === 'P' ? 'Paulista' : 'Olinda';
+    userUnit[from] = unidade;
+
+    await msg.reply(
+      `Você escolheu a unidade *${unidade}*.\nAgora, escolha a opção desejada:\n\n` +
+      '🏊‍♀️ *1 - Natação Infantil*\n' +
+      '💧 *2 - Hidroginástica*\n' +
+      '📌 *3 - Conhecer o espaço*'
+    );
     return;
   }
 
-  const unidade = session.unidade;
+  const unidade = userUnit[from];
 
-  if (text === '1') {
+  if (unidade && upperText === '1') {
     const resposta = unidade === 'Paulista'
       ? '🏊‍♀️ *Natação – Unidade Paulista*\n• R$ 80,00 (2 dias na semana)'
       : '🏊‍♀️ *Natação – Unidade Olinda*\n• Matrícula: R$ 50,00\n• R$ 175,00 (2 dias na semana)\n• R$ 110,00 (1 dia - sábado)';
     await msg.reply(resposta);
     await client.sendMessage(from, contactInfo);
-  } else if (text === '2') {
+    return;
+  }
+
+  if (unidade && upperText === '2') {
     const resposta = unidade === 'Paulista'
       ? '💧 *Hidroginástica – Unidade Paulista*\n• R$ 80,00 (3 dias na semana)'
       : '💧 *Hidroginástica – Unidade Olinda*\n• R$ 170,00 (3 dias na semana)';
     await msg.reply(resposta);
     await client.sendMessage(from, contactInfo);
-  } else if (text === '3') {
+    return;
+  }
+
+  if (unidade && upperText === '3') {
     await msg.reply(
       '📌 *Outras opções:*\n' +
       '💳 *4* - Falar sobre pagamento com a Tia Bella\n' +
@@ -100,29 +95,42 @@ client.on('message', async (msg) => {
       '👶 *6* - Verificar vagas para crianças\n' +
       '📞 *7* - Falar diretamente com a Tia Bella'
     );
-  } else if (text === '4') {
+    return;
+  }
+
+  if (unidade && upperText === '4') {
     await msg.reply('💳 Encaminhando para Tia Bella sobre pagamentos...');
     await client.sendMessage(from, contactInfo);
-  } else if (text === '5') {
+    return;
+  }
+
+  if (unidade && upperText === '5') {
     const link = unidade === 'Paulista'
       ? 'https://drive.google.com/drive/folders/13ZG1l65fTTJ2zhaXhfOeS_wKIeyKQM-m?usp=drive_link'
       : 'https://drive.google.com/drive/folders/1GEKXsBrH5D4prUXyFkBoyrNIIEVGnV5X?usp=drive_link';
     await msg.reply(`📸 Veja as fotos da unidade *${unidade}*:\n${link}`);
     await client.sendMessage(from, contactInfo);
-  } else if (text === '6') {
+    return;
+  }
+
+  if (unidade && upperText === '6') {
     await msg.reply('👶 Vamos verificar a disponibilidade de vaga para a idade informada.');
     await client.sendMessage(from, contactInfo);
-  } else if (text === '7') {
+    return;
+  }
+
+  if (unidade && upperText === '7') {
     await msg.reply('📞 Encaminhando seu atendimento para a Tia Bella...');
     await msg.reply('✅ Sua mensagem foi encaminhada com sucesso!');
-  } else {
-    await msg.reply(
-      '🚫 Desculpa, não entendi. Por favor, selecione uma das opções abaixo ou digite *oi* para reiniciar o atendimento.\n' +
-      '🏊‍♀️ *1 - Natação Infantil*\n' +
-      '💧 *2 - Hidroginástica*\n' +
-      '📌 *3 - Conhecer o espaço*'
-    );
+    return;
   }
+
+  await msg.reply(
+    '🚫 Desculpa, não entendi. Por favor, selecione uma das opções abaixo ou digite *oi* para reiniciar o atendimento.\n' +
+    '🏊‍♀️ *1 - Natação Infantil*\n' +
+    '💧 *2 - Hidroginástica*\n' +
+    '📌 *3 - Conhecer o espaço*'
+  );
 });
 
 client.on('call', async (call) => {
@@ -139,9 +147,10 @@ client.on('call', async (call) => {
     '➤ *P* - Paulista\n' +
     '➤ *O* - Olinda'
   );
-
 });
+
 client.on('disconnected', (reason) => {
   console.log('❌ WhatsApp desconectado:', reason);
 });
+
 client.initialize();
